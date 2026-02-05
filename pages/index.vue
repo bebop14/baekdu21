@@ -21,6 +21,9 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-gpx'
 
+const config = useRuntimeConfig()
+const baseURL = config.app.baseURL || '/'
+
 const showMarkers = ref(true)
 const showCompleted = ref(false) // false: 진행중(data), true: 전체(completed)
 let map: L.Map | null = null
@@ -30,10 +33,10 @@ const dataFiles = ref<string[]>([])
 const completedFiles = ref<string[]>([])
 
 async function fetchFileLists() {
-  const dataRes = await fetch('/data/filelist.json')
-  dataFiles.value = (await dataRes.json()).map((f: string) => `/data/${f}`)
-  const completedRes = await fetch('/completed/filelist.json')
-  completedFiles.value = (await completedRes.json()).map((f: string) => `/completed/${f}`)
+  const dataRes = await fetch(`${baseURL}data/filelist.json`)
+  dataFiles.value = (await dataRes.json()).map((f: string) => `${baseURL}data/${f}`)
+  const completedRes = await fetch(`${baseURL}completed/filelist.json`)
+  completedFiles.value = (await completedRes.json()).map((f: string) => `${baseURL}completed/${f}`)
 }
 
 const gpxFiles = computed(() => showCompleted.value ? completedFiles.value : dataFiles.value)
