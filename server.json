@@ -1,0 +1,24 @@
+{
+    "version": 1,
+    "export_time": "2025-10-29T08:32:04.190497124Z",
+    "profiles": [
+      {
+        "name": "default",
+        "real": false,
+        "hosts": [
+          {
+            "hostname": "dev-edu-portal-fe-v3-ncl",
+            "description": ""
+          },
+          {
+            "hostname": "10.113.105.54",
+            "description": ""
+          },
+          {
+            "hostname": "dev-portal-fe-jenkins-ncl",
+            "description": ""
+          }
+        ]
+      },
+    ]
+  }

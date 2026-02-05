@@ -1,0 +1,37 @@
+{
+  "name": "nuxt-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prebuild": "node scripts/generate-gpx-list.cjs",
+    "pregenerate": "node scripts/generate-gpx-list.cjs",
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:unit": "vitest --project unit",
+    "test:nuxt": "vitest --project nuxt"
+  },
+  "dependencies": {
+    "@nuxt/eslint": "^1.5.2",
+    "@nuxt/scripts": "^0.11.9",
+    "@nuxt/test-utils": "^3.19.2",
+    "@unhead/vue": "^2.0.12",
+    "eslint": "^9.31.0",
+    "leaflet": "^1.9.4",
+    "leaflet-gpx": "^2.2.0",
+    "nuxt": "^3.17.7",
+    "typescript": "^5.8.3",
+    "vue": "^3.5.17",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@vue/test-utils": "^2.4.6",
+    "happy-dom": "^18.0.1",
+    "jsdom": "^26.1.0",
+    "vitest": "^3.2.4"
+  }
+}
