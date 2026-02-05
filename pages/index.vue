@@ -4,7 +4,7 @@
     <div id="map"></div>
     <div class="controls">
       <label style="margin-right: 16px;">
-        <input type="checkbox" v-model="showCompleted" />
+        <input type="checkbox" v-model="showInProgress" />
         진행중 백두대간 보기
       </label>
       <label>
@@ -24,8 +24,19 @@ import 'leaflet-gpx'
 const config = useRuntimeConfig()
 const baseURL = config.app.baseURL || '/'
 
+// Leaflet 기본 마커 아이콘 경로 수정 (baseURL 적용)
+const defaultIcon = L.icon({
+  iconUrl: `${baseURL}marker-icon.png`,
+  iconRetinaUrl: `${baseURL}marker-icon-2x.png`,
+  shadowUrl: `${baseURL}marker-shadow.png`,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+})
+
 const showMarkers = ref(true)
-const showCompleted = ref(false) // false: 진행중(data), true: 전체(completed)
+const showInProgress = ref(true) // true: 진행중(data), false: 전체(completed)
 let map: L.Map | null = null
 let loadedGpxLayers: any[] = []
 
@@ -39,7 +50,7 @@ async function fetchFileLists() {
   completedFiles.value = (await completedRes.json()).map((f: string) => `${baseURL}completed/${f}`)
 }
 
-const gpxFiles = computed(() => showCompleted.value ? completedFiles.value : dataFiles.value)
+const gpxFiles = computed(() => showInProgress.value ? completedFiles.value : dataFiles.value)
 
 function clearGpxLayers() {
   loadedGpxLayers.forEach(layer => map?.removeLayer(layer))
@@ -58,10 +69,10 @@ function loadGpxFiles() {
     const gpxLayer = new (window as any).L.GPX(gpxUrl, {
       async: true,
       markers: {
-        startIcon: showMarkers.value && showCompleted.value ? new L.Icon.Default() : false,
+        startIcon: false,
         endIcon: false,
-        shadowUrl: showMarkers.value && showCompleted.value ? L.Icon.Default.prototype.options.shadowUrl : false,
-        wptIcon: showMarkers.value && showCompleted.value ? new L.Icon.Default() : false
+        shadowUrl: false,
+        wptIcon: false
       },
       polyline_options: {
         color: 'red',
@@ -71,42 +82,28 @@ function loadGpxFiles() {
     }).on('loaded', function(e: any) {
       bounds.extend(e.target.getBounds())
       // 시작점에 마커 및 팝업 표시
-      const gpx = e.target
-      if (gpx._layers) {
-        const layers = Object.values(gpx._layers)
-        for (const layer of layers) {
-          if (layer._layers) {
-            const subLayers = Object.values(layer._layers)
-            for (const subLayer of subLayers) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const sl = subLayer as any
-              if (sl._latlngs && sl._latlngs.length > 0) {
-                const firstPoint = sl._latlngs[0]
-                // GPX 이름 우선: metadata->name, trk->name, 그 외 파일명 폴백
-                const gpxAny = gpx as any
-                const nameFromApi = typeof gpxAny.get_name === 'function' ? gpxAny.get_name() : ''
-                const nameFromInfo = gpxAny._info && gpxAny._info.name ? gpxAny._info.name : ''
-                const nameFromRaw = gpxAny._gpx ? (
-                  (gpxAny._gpx.metadata && gpxAny._gpx.metadata.name) ||
-                  (gpxAny._gpx.trk && gpxAny._gpx.trk.name) ||
-                  ''
-                ) : ''
-                const fallbackFromFilename = gpxUrl.split('/').pop()?.replace('.gpx', '') || ''
-                const title = (nameFromApi || nameFromInfo || nameFromRaw || fallbackFromFilename) as string
-                const startMarker = L.marker([firstPoint.lat, firstPoint.lng], {})
-                  .bindPopup(title, { permanent: true, direction: 'top' })
-                if (showMarkers.value) {
-                  startMarker.addTo(map!)
-                  loadedGpxLayers.push(startMarker)
-                }
-                break
-              }
+      if (showMarkers.value) {
+        const gpx = e.target
+        // 트랙의 첫 번째 포인트 찾기
+        let startLatLng: L.LatLng | null = null
+        gpx.getLayers().forEach((layer: any) => {
+          if (!startLatLng && layer.getLatLngs) {
+            const latlngs = layer.getLatLngs()
+            if (latlngs && latlngs.length > 0) {
+              startLatLng = Array.isArray(latlngs[0]) ? latlngs[0][0] : latlngs[0]
             }
           }
+        })
+        if (startLatLng) {
+          const title = gpx.get_name() || gpxUrl.split('/').pop()?.replace('.gpx', '') || ''
+          const startMarker = L.marker(startLatLng, { icon: defaultIcon })
+            .bindPopup(title)
+          startMarker.addTo(map!)
+          loadedGpxLayers.push(startMarker)
         }
       }
       if (idx === gpxFiles.value.length - 1 && bounds.isValid()) {
-        map.fitBounds(bounds)
+        map!.fitBounds(bounds)
       }
     }).addTo(map)
     loadedGpxLayers.push(gpxLayer)
@@ -122,7 +119,7 @@ onMounted(async () => {
   loadGpxFiles()
 })
 
-watch([showMarkers, showCompleted], reloadGpxLayers)
+watch([showMarkers, showInProgress], reloadGpxLayers)
 </script>
 
 <style scoped>
