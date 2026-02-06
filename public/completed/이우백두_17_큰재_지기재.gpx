@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <gpx version="1.1" creator="https://www.komoot.de" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
   <metadata>
-    <name>이우백두_17_큰재_지기재</name>
+  <name>18차 17구간 큰재 지기재 (2025/11/22)</name>
     <author>
       <link href="https://www.komoot.de">
         <text>komoot</text>
@@ -10,7 +10,7 @@
     </author>
   </metadata>
   <trk>
-    <name>이우백두_17_큰재_지기재</name>
+    <name>이우백두_18_큰재_지기재</name>
     <trkseg>
       <trkpt lat="36.279728" lon="128.043495">
         <ele>335.259834</ele>
