@@ -56,16 +56,47 @@
       </div>
     </div>
 
-    <!-- 로딩 표시기 -->
-    <div v-if="isLoading" class="loading-indicator">
-      <div class="loading-spinner"></div>
-      <span>{{ loadedCount }} / {{ totalCount }} 구간 로드 중...</span>
+    <!-- 타임라인 슬라이더 (완료 구간 보기 모드에서만 표시) -->
+    <div v-if="showCompletedOnly && timelineEntries.length > 0" class="timeline-panel">
+      <div class="timeline-header">
+        <button
+          class="play-btn"
+          :class="{ playing: isPlaying }"
+          @click="togglePlay"
+          :aria-label="isPlaying ? '정지' : '재생'"
+        >
+          <svg v-if="!isPlaying" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <polygon points="5,3 19,12 5,21" />
+          </svg>
+          <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <rect x="5" y="3" width="4" height="18" />
+            <rect x="15" y="3" width="4" height="18" />
+          </svg>
+        </button>
+        <span class="timeline-label">
+          {{ currentStepLabel }}
+        </span>
+      </div>
+      <input
+        type="range"
+        class="timeline-slider"
+        :min="0"
+        :max="timelineEntries.length"
+        v-model.number="timelineStep"
+        :aria-label="'산행 진행 타임라인'"
+        @input="onSliderInput"
+      />
+      <div class="timeline-ticks">
+        <span>시작</span>
+        <span>{{ timelineEntries.length }}차 완료</span>
+      </div>
     </div>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-gpx'
@@ -92,13 +123,43 @@ let markerLayers: L.Marker[] = []
 const dataFiles = ref<string[]>([])
 const completedFiles = ref<string[]>([])
 
-const isLoading = ref(false)
-const loadedCount = ref(0)
-const totalCount = ref(0)
+
+// 타임라인 관련
+interface TimelineEntry {
+  file: string
+  name: string
+  order: number
+}
+const timelineEntries = ref<TimelineEntry[]>([])
+const timelineStep = ref(0)
+const isPlaying = ref(false)
+let playTimer: ReturnType<typeof setInterval> | null = null
 
 const progressPercent = computed(() => {
   if (dataFiles.value.length === 0) return 0
   return Math.round((completedFiles.value.length / dataFiles.value.length) * 100)
+})
+
+// 타임라인 파일 URL 목록 (진행 순서)
+const timelineFileUrls = computed(() =>
+  timelineEntries.value.map(e => `${baseURL}completed/${e.file}`)
+)
+
+// 현재 타임라인 스텝에 해당하는 파일들
+const timelineFiles = computed(() => {
+  if (timelineStep.value >= timelineFileUrls.value.length) {
+    return timelineFileUrls.value
+  }
+  return timelineFileUrls.value.slice(0, timelineStep.value)
+})
+
+const currentStepLabel = computed(() => {
+  const total = timelineEntries.value.length
+  const step = timelineStep.value
+  if (step === 0) return '시작 전'
+  if (step >= total) return `전체 ${total}개 구간`
+  const entry = timelineEntries.value[step - 1]
+  return `${entry.order}차 — ${entry.name.replace(/^\d+차\s*/, '')}`
 })
 
 const gpxFiles = computed(() =>
@@ -114,6 +175,8 @@ async function fetchFileLists() {
   dataFiles.value = (await dataRes.json()).map((f: string) => `${baseURL}data/${f}`)
   const completedRes = await fetch(`${baseURL}completed/filelist.json`)
   completedFiles.value = (await completedRes.json()).map((f: string) => `${baseURL}completed/${f}`)
+  const timelineRes = await fetch(`${baseURL}completed/timeline.json`)
+  timelineEntries.value = await timelineRes.json()
 }
 
 function clearGpxLayers() {
@@ -129,7 +192,6 @@ function clearMarkers() {
 
 function toggleMarkerVisibility() {
   if (showMarkers.value) {
-    // 마커가 없으면 현재 GPX 레이어에서 다시 생성
     if (markerLayers.length === 0) {
       gpxLayers.forEach(gpxLayer => {
         addMarkerForGpxLayer(gpxLayer)
@@ -163,15 +225,9 @@ function addMarkerForGpxLayer(gpxLayer: any) {
   }
 }
 
-function loadGpxFiles() {
+function loadGpxFilesFromList(files: string[], color: string, fitMap: boolean = true) {
   if (!map) return
   const bounds = new L.LatLngBounds()
-  const files = gpxFiles.value
-  const color = trackColor.value
-
-  isLoading.value = true
-  loadedCount.value = 0
-  totalCount.value = files.length
 
   let completedLoads = 0
 
@@ -194,26 +250,66 @@ function loadGpxFiles() {
       addMarkerForGpxLayer(e.target)
 
       completedLoads++
-      loadedCount.value = completedLoads
-
-      // 모든 파일 로드 완료 시 fitBounds
-      if (completedLoads === files.length && bounds.isValid()) {
+      if (completedLoads === files.length && bounds.isValid() && fitMap) {
         map!.fitBounds(bounds, { padding: [20, 20] })
-        isLoading.value = false
       }
     }).addTo(map)
     gpxLayers.push(gpxLayer)
   })
 
-  // 파일이 0개인 경우
-  if (files.length === 0) {
-    isLoading.value = false
+}
+
+function loadGpxFiles() {
+  loadGpxFilesFromList(gpxFiles.value, trackColor.value)
+}
+
+// 타임라인 슬라이더 조작 시
+function onSliderInput() {
+  stopPlay()
+  clearGpxLayers()
+  if (timelineStep.value === 0) return
+  loadGpxFilesFromList(timelineFiles.value, '#2563eb')
+}
+
+// 재생/정지
+function togglePlay() {
+  if (isPlaying.value) {
+    stopPlay()
+  } else {
+    startPlay()
   }
 }
 
-function reloadGpxLayers() {
-  clearGpxLayers()
-  loadGpxFiles()
+function startPlay() {
+  if (timelineFileUrls.value.length === 0) return
+
+  // 이미 끝까지 갔으면 처음부터
+  if (timelineStep.value >= timelineFileUrls.value.length) {
+    timelineStep.value = 0
+    clearGpxLayers()
+  }
+
+  isPlaying.value = true
+  playTimer = setInterval(() => {
+    if (timelineStep.value >= timelineFileUrls.value.length) {
+      stopPlay()
+      return
+    }
+    timelineStep.value++
+    // 새로 추가된 파일 하나만 로드
+    const newFile = timelineFileUrls.value[timelineStep.value - 1]
+    if (newFile) {
+      loadGpxFilesFromList([newFile], '#2563eb', false)
+    }
+  }, 800)
+}
+
+function stopPlay() {
+  isPlaying.value = false
+  if (playTimer) {
+    clearInterval(playTimer)
+    playTimer = null
+  }
 }
 
 onMounted(async () => {
@@ -222,14 +318,27 @@ onMounted(async () => {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   }).addTo(map)
   await fetchFileLists()
+  // 초기: 타임라인을 최대로 설정 (전체 표시)
+  timelineStep.value = timelineFileUrls.value.length
   loadGpxFiles()
 })
 
-// showCompletedOnly 변경 시만 전체 재로드
-watch(showCompletedOnly, reloadGpxLayers)
+// showCompletedOnly 변경 시 재로드 + 타임라인 리셋
+watch(showCompletedOnly, (val) => {
+  stopPlay()
+  if (val) {
+    timelineStep.value = timelineFileUrls.value.length
+  }
+  clearGpxLayers()
+  loadGpxFiles()
+})
 
-// showMarkers 변경 시 마커만 show/hide (GPX 재로드 없음)
+// showMarkers 변경 시 마커만 show/hide
 watch(showMarkers, toggleMarkerVisibility)
+
+onUnmounted(() => {
+  stopPlay()
+})
 </script>
 
 <style scoped>
@@ -364,37 +473,114 @@ watch(showMarkers, toggleMarkerVisibility)
   transform: translateX(20px);
 }
 
-/* 로딩 표시기 */
-.loading-indicator {
+/* 타임라인 패널 */
+.timeline-panel {
   position: absolute;
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
-  background: rgba(26, 26, 46, 0.9);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: 24px;
-  padding: 8px 20px;
+  background: rgba(26, 26, 46, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 14px;
+  padding: 12px 20px 10px;
+  min-width: 320px;
+  max-width: 500px;
+  width: calc(100vw - 48px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+.timeline-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #e2e8f0;
-  font-size: 0.85em;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  margin-bottom: 8px;
 }
 
-.loading-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: #22c55e;
+.play-btn {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s ease;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.play-btn:hover {
+  background: #1d4ed8;
+}
+
+.play-btn:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.play-btn.playing {
+  background: #dc2626;
+}
+
+.play-btn.playing:hover {
+  background: #b91c1c;
+}
+
+.timeline-label {
+  font-size: 0.85em;
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+/* 슬라이더 커스텀 스타일 */
+.timeline-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.timeline-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 3px solid #fff;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.timeline-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 3px solid #fff;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.timeline-slider:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.timeline-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7em;
+  color: #64748b;
+  margin-top: 4px;
 }
 
 /* 모바일 반응형 */
@@ -411,9 +597,12 @@ watch(showMarkers, toggleMarkerVisibility)
     font-size: 1em;
   }
 
-  .loading-indicator {
-    bottom: 16px;
-    font-size: 0.8em;
+  .timeline-panel {
+    bottom: 12px;
+    min-width: auto;
+    width: calc(100vw - 24px);
+    padding: 10px 14px 8px;
   }
+
 }
 </style>
