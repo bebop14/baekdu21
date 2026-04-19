@@ -9,10 +9,21 @@
 
     <!-- 지도 위 오버레이 패널 -->
     <div class="overlay-panel">
-      <h1 class="title">이우백두 21기</h1>
-      <p class="subtitle">백두대간 종주 기록</p>
+      <div class="panel-header">
+        <h1 class="title">이우백두 21기</h1>
+        <button
+          class="collapse-btn"
+          @click="isPanelExpanded = !isPanelExpanded"
+          :aria-label="isPanelExpanded ? '패널 접기' : '패널 펼치기'"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline v-if="isPanelExpanded" points="18,15 12,9 6,15" />
+            <polyline v-else points="6,9 12,15 18,9" />
+          </svg>
+        </button>
+      </div>
 
-      <!-- 진행 현황 -->
+      <!-- 진행 현황 (항상 표시) -->
       <div class="progress-info">
         <div class="progress-bar-container">
           <div
@@ -25,34 +36,39 @@
         </span>
       </div>
 
-      <!-- 토글 컨트롤 -->
-      <div class="controls">
-        <label class="toggle-label">
-          <span class="toggle-text">완료 구간만 보기</span>
-          <button
-            type="button"
-            role="switch"
-            :aria-checked="showCompletedOnly"
-            class="toggle-switch"
-            :class="{ active: showCompletedOnly }"
-            @click="showCompletedOnly = !showCompletedOnly"
-          >
-            <span class="toggle-knob"></span>
-          </button>
-        </label>
-        <label class="toggle-label">
-          <span class="toggle-text">마커 표시</span>
-          <button
-            type="button"
-            role="switch"
-            :aria-checked="showMarkers"
-            class="toggle-switch"
-            :class="{ active: showMarkers }"
-            @click="showMarkers = !showMarkers"
-          >
-            <span class="toggle-knob"></span>
-          </button>
-        </label>
+      <!-- 접기/펼치기 영역 -->
+      <div class="collapsible" v-show="isPanelExpanded">
+        <p class="subtitle">백두대간 종주 기록</p>
+
+        <!-- 토글 컨트롤 -->
+        <div class="controls">
+          <label class="toggle-label">
+            <span class="toggle-text">완료 구간만 보기</span>
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="showCompletedOnly"
+              class="toggle-switch"
+              :class="{ active: showCompletedOnly }"
+              @click="showCompletedOnly = !showCompletedOnly"
+            >
+              <span class="toggle-knob"></span>
+            </button>
+          </label>
+          <label class="toggle-label">
+            <span class="toggle-text">마커 표시</span>
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="showMarkers"
+              class="toggle-switch"
+              :class="{ active: showMarkers }"
+              @click="showMarkers = !showMarkers"
+            >
+              <span class="toggle-knob"></span>
+            </button>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -116,6 +132,7 @@ const defaultIcon = L.icon({
 
 const showMarkers = ref(true)
 const showCompletedOnly = ref(true)
+const isPanelExpanded = ref(false)
 let map: L.Map | null = null
 let gpxLayers: any[] = []
 let markerLayers: L.Marker[] = []
@@ -373,6 +390,14 @@ onUnmounted(() => {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
 }
 
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .title {
   margin: 0;
   font-size: 1.1em;
@@ -381,8 +406,37 @@ onUnmounted(() => {
   letter-spacing: -0.02em;
 }
 
+.collapse-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  line-height: 0;
+  flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.collapse-btn:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.collapse-btn:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.collapsible {
+  margin-top: 12px;
+}
+
 .subtitle {
-  margin: 2px 0 12px;
+  margin: 0 0 12px;
   font-size: 0.8em;
   color: #94a3b8;
   font-weight: 400;
@@ -597,12 +651,26 @@ onUnmounted(() => {
     font-size: 1em;
   }
 
+  .collapse-btn {
+    display: flex;
+  }
+
+  .progress-info {
+    margin-bottom: 0;
+  }
+
   .timeline-panel {
     bottom: 12px;
     min-width: auto;
     width: calc(100vw - 24px);
     padding: 10px 14px 8px;
   }
+}
 
+/* 데스크탑에서는 항상 펼침 상태 유지 */
+@media (min-width: 481px) {
+  .collapsible {
+    display: block !important;
+  }
 }
 </style>
